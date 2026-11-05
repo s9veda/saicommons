@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sssapi",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-02",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "sssapi",
+    "database_id": "66cb8699-7002-4e2e-a301-af81130d3a86",
+    "migrations_dir": "migrations"
+  }]
+}

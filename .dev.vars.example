@@ -1,0 +1,10 @@
+SESSION_SECRET=replace-with-a-long-random-secret
+ADMIN_API_KEY=replace-with-a-different-long-random-secret
+BREVO_API_KEY=
+BREVO_SENDER_EMAIL=noreply@example.org
+BREVO_SENDER_NAME=SSS Auth
+ALLOWED_ORIGINS=https://example.org,https://app.example.org
+REVIEW_LOGIN_MANTRAJAPAM_EMAIL=
+REVIEW_LOGIN_MANTRAJAPAM_PASSWORD=
+REVIEW_LOGIN_BHAJANSTUDIO_EMAIL=
+REVIEW_LOGIN_BHAJANSTUDIO_PASSWORD=
