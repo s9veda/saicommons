@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Sai Commons Admin",
+    "slug": "saicommons-admin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./web/assets/icon.png",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-secure-store"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.s9veda.saicommons.admin"
+    },
+    "android": {
+      "package": "org.s9veda.saicommons.admin",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./web/assets/android-icon-foreground.png",
+        "backgroundImage": "./web/assets/android-icon-background.png",
+        "monochromeImage": "./web/assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./web/assets/favicon.png"
+    }
+  }
+}

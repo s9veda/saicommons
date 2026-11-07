@@ -3,7 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "typecheck": "tsc --noEmit", "smoke": "node scripts/smoke.mjs" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "start": "npm --prefix src run start",
+    "ios": "npm --prefix src run ios",
+    "android": "npm --prefix src run android",
+    "web": "npm --prefix src run web",
+    "typecheck:app": "npm --prefix src run typecheck"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261103.1",
     "typescript": "^5.9.3",

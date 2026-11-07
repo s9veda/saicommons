@@ -1,10 +1,12 @@
 SESSION_SECRET=replace-with-a-long-random-secret
+# Comma-separated client=key pairs: one key per web/mobile app so each can be rotated independently.
+API_KEYS=mantrajapam-web=sc_replace,mantrajapam-ios=sc_replace,mantrajapam-android=sc_replace,bhajanstudio-web=sc_replace,bhajanstudio-ios=sc_replace,bhajanstudio-android=sc_replace,admin-web=sc_replace
+ALLOWED_ORIGINS=https://example.org,https://app.example.org
+# `admin-web` is the client key used by the Expo admin app in src/web/.
+# Server-to-server key for /v1/admin/* (user import); never ship it in an app.
 ADMIN_API_KEY=replace-with-a-different-long-random-secret
+TURSO_DATABASE_URL=libsql://your-db-your-org.turso.io
+TURSO_AUTH_TOKEN=
 BREVO_API_KEY=
 BREVO_SENDER_EMAIL=noreply@example.org
-BREVO_SENDER_NAME=SSS Auth
-ALLOWED_ORIGINS=https://example.org,https://app.example.org
-REVIEW_LOGIN_MANTRAJAPAM_EMAIL=
-REVIEW_LOGIN_MANTRAJAPAM_PASSWORD=
-REVIEW_LOGIN_BHAJANSTUDIO_EMAIL=
-REVIEW_LOGIN_BHAJANSTUDIO_PASSWORD=
+BREVO_SENDER_NAME=Sai Commons
