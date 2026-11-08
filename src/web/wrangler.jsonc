@@ -1,0 +1,5 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "saicommons-web",
+  "pages_build_output_dir": "src/web/dist"
+}
