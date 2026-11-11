@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, Platform, Text, View } from 'react-native';
 import { ApiError, GENDERS, api, type Center, type User } from './api';
-import { Badge, Button, Check, Chip, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
+import { AddButton, Badge, Button, Check, Chip, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
 
 const ROLES = ['all', 'admin', 'editor', 'viewer'] as const;
 
@@ -29,8 +29,14 @@ export function UsersScreen({ users, centers, me, reload }: { users: User[]; cen
 
   return (
     <View style={{ flex: 1 }}>
-      <ManagementHeader title="Users" description={`${shown.length === users.length ? users.length : `${shown.length}/${users.length}`} users · manage access and centers`}
-        addLabel="Add user" onAdd={() => setEditing('new')} />
+      {Platform.OS !== 'web' ? (
+        <ManagementHeader title="Users" description={`${shown.length === users.length ? users.length : `${shown.length}/${users.length}`} users · manage access and centers`}
+          addLabel="Add user" onAdd={() => setEditing('new')} />
+      ) : (
+        <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <AddButton label="Add user" onPress={() => setEditing('new')} />
+        </View>
+      )}
       <View style={managementStyles.content}>
         <ManagementSearch label="Search users" value={search} onChangeText={setSearch} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4 }}>
@@ -105,7 +111,7 @@ function UserForm({ user, centers, onClose, onSaved }: { user: User | null; cent
     setError('');
     try {
       await api.saveUser(user?.id ?? null, {
-        ...(user ? {} : { email: email.trim() }),
+        ...(user ? {} : { email: email.trim() || undefined }),
         name, gender, is_admin: isAdmin, associated_centers: [...member], editor_for: [...editor],
       });
       await onSaved();
@@ -117,7 +123,7 @@ function UserForm({ user, centers, onClose, onSaved }: { user: User | null; cent
 
   return (
     <FormModal title={user ? 'Edit user' : 'Add user'} onClose={onClose}>
-      <Field management label="Email" value={email} onChangeText={setEmail} editable={!user} autoCapitalize="none" keyboardType="email-address" />
+      <Field management label="Email (optional)" value={email} onChangeText={setEmail} editable={!user} autoCapitalize="none" keyboardType="email-address" />
       <Field management label="Name" value={name} onChangeText={setName} maxLength={200} />
       <Text style={managementStyles.formLabel}>GENDER</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -136,7 +142,7 @@ function UserForm({ user, centers, onClose, onSaved }: { user: User | null; cent
       {centers.length === 0 && <Text style={{ color: colors.muted }}>No centers yet.</Text>}
       <ErrorText message={error} />
       <View style={{ gap: 8, marginTop: 12 }}>
-        <Button title={user ? 'Save changes' : 'Add user'} onPress={save} disabled={busy || !name.trim() || (!user && !email.includes('@'))} />
+        <Button title={user ? 'Save changes' : 'Add user'} onPress={save} disabled={busy || !name.trim()} />
         <Button title="Cancel" kind="secondary" onPress={onClose} />
       </View>
     </FormModal>

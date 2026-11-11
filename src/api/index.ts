@@ -6,6 +6,7 @@ import {
 import { USER_SELECT, assertCentersExist, parseProfile, publicUser, type Profile, type UserRow } from './users';
 import { adminCreate, adminDelete, adminDeleteById, adminImport, adminList, adminUpdate } from './admin';
 import { createCenter, deleteCenter, getCenter, listCenters, updateCenter } from './centers';
+import { parseCenterList } from './users';
 
 const OTP_TTL_MS = 10 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -92,6 +93,34 @@ async function register({ request, env, client }: Ctx): Promise<Response> {
   return json(200, GENERIC_OTP);
 }
 
+async function registerName({ request, env, client }: Ctx): Promise<Response> {
+  const payload = await readJson(request);
+  // Email is explicitly NOT required for this endpoint
+  const profile = parseProfile(payload);
+  // Allow empty associated_centers if not provided, but validate if provided
+  if (profile.associated_centers.length > 0) {
+    await assertCentersExist(env, profile.associated_centers);
+  }
+  const editorFor = parseCenterList(payload.editor_for, 'editor_for');
+  if (editorFor.length > 0) {
+    await assertCentersExist(env, editorFor);
+  }
+  const associated = [...new Set([...profile.associated_centers, ...editorFor])];
+  
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await transaction(env, [
+    {
+      sql: `INSERT INTO users (id, email, name, gender, is_admin, registered_via, associated_centers, editor_for, created_at, updated_at)
+        VALUES (?, NULL, ?, ?, 0, 'name-registration', ?, ?, ?, ?)`,
+      args: [id, profile.name, profile.gender, JSON.stringify(associated), JSON.stringify(editorFor), now, now],
+    },
+  ]);
+  const token = await issueToken(env, id, client);
+  const { rows } = await query(env, `${USER_SELECT} WHERE u.id = ?`, [id]);
+  return json(201, { user: publicUser(rows[0] as unknown as UserRow), token });
+}
+
 async function login({ request, env, client }: Ctx): Promise<Response> {
   const email = normalizeEmail((await readJson(request)).email);
   if (!email) throw new HttpError(400, 'A valid email is required');
@@ -162,6 +191,7 @@ type Auth = 'client' | 'admin';
 interface Route { method: string; pattern: RegExp; auth: Auth; handler: (ctx: Ctx) => Promise<Response> }
 const ROUTES: Route[] = [
   { method: 'POST', pattern: /^\/v1\/register$/, auth: 'client', handler: register },
+  { method: 'POST', pattern: /^\/v1\/register-name$/, auth: 'client', handler: registerName },
   { method: 'POST', pattern: /^\/v1\/login$/, auth: 'client', handler: login },
   { method: 'POST', pattern: /^\/v1\/verify-otp$/, auth: 'client', handler: verifyOtp },
   { method: 'GET', pattern: /^\/v1\/session$/, auth: 'client', handler: session },

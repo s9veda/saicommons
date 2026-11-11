@@ -75,6 +75,8 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 
 export const api = {
   login: (email: string) => request('/v1/login', 'POST', { email }),
+  registerName: (input: { name: string; gender: string | null; associated_centers: number[]; editor_for?: number[] }) =>
+    request<{ user: User; token: string }>('/v1/register-name', 'POST', input),
   verify: (email: string, otp_code: string) =>
     request<{ user: User; token: string }>('/v1/verify-otp', 'POST', { email, otp_code }),
   session: () => request<{ user: User }>('/v1/session'),

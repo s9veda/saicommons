@@ -59,12 +59,39 @@ async function assertAdminRemovable(ctx: Ctx, target: { id: string; email: strin
 export async function adminCreate(ctx: Ctx): Promise<Response> {
   const payload = await readJson(ctx.request);
   const email = normalizeEmail(payload.email);
-  if (!email) throw new HttpError(400, 'A valid email is required');
   const profile = parseProfile(payload);
   const { isAdmin, editorFor } = parseFlags(payload);
   const associated = [...new Set([...profile.associated_centers, ...editorFor])];
   await assertCentersExist(ctx.env, associated);
-  if ((await query(ctx.env, 'SELECT id FROM users WHERE email = ?', [email])).rows.length > 0) throw new HttpError(409, 'A user with this email already exists');
+  
+  // Check name uniqueness within associated centers
+  if (associated.length > 0) {
+    const { rows } = await query(ctx.env, `
+      SELECT u.id, u.name FROM users u
+      WHERE u.name = ? AND u.id != ? AND (
+        u.associated_centers IS NOT NULL AND json_type(u.associated_centers) = 'array' AND (
+          EXISTS (SELECT 1 FROM json_each(u.associated_centers) WHERE value IN (${associated.map(() => '?').join(',')}))
+        )
+        OR u.editor_for IS NOT NULL AND json_type(u.editor_for) = 'array' AND (
+          EXISTS (SELECT 1 FROM json_each(u.editor_for) WHERE value IN (${associated.map(() => '?').join(',')}))
+        )
+      )
+    `, [profile.name, 'new', ...associated, ...associated]);
+    if (rows.length > 0) {
+      const centerNames = await Promise.all(associated.map(async (id) => {
+        const { rows: centerRows } = await query(ctx.env, 'SELECT name FROM centers WHERE id = ?', [id]);
+        return centerRows[0]?.name;
+      }));
+      const conflictingCenters = centerNames.filter(Boolean).join(', ');
+      throw new HttpError(409, `A user with this name already exists in: ${conflictingCenters}`);
+    }
+  }
+  
+  // Only check email uniqueness if email is provided
+  if (email && (await query(ctx.env, 'SELECT id FROM users WHERE email = ?', [email])).rows.length > 0) {
+    throw new HttpError(409, 'A user with this email already exists');
+  }
+  
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await transaction(ctx.env, [
@@ -84,13 +111,38 @@ export async function adminUpdate(ctx: Ctx): Promise<Response> {
   if (!current) throw new HttpError(404, 'User not found');
   const profile = parseProfile(payload);
   const { isAdmin, editorFor } = parseFlags(payload);
+  const associated = [...new Set([...profile.associated_centers, ...editorFor])];
+  
   if (current.is_admin && !isAdmin) await assertAdminRemovable(ctx, current, 'remove administrator rights from');
-  await assertCentersExist(ctx.env, [...new Set([...profile.associated_centers, ...editorFor])]);
+  await assertCentersExist(ctx.env, associated);
+  
+  // Check name uniqueness within associated centers (excluding current user)
+  if (associated.length > 0) {
+    const { rows } = await query(ctx.env, `
+      SELECT u.id, u.name FROM users u
+      WHERE u.name = ? AND u.id != ? AND (
+        u.associated_centers IS NOT NULL AND json_type(u.associated_centers) = 'array' AND (
+          EXISTS (SELECT 1 FROM json_each(u.associated_centers) WHERE value IN (${associated.map(() => '?').join(',')}))
+        )
+        OR u.editor_for IS NOT NULL AND json_type(u.editor_for) = 'array' AND (
+          EXISTS (SELECT 1 FROM json_each(u.editor_for) WHERE value IN (${associated.map(() => '?').join(',')}))
+        )
+      )
+    `, [profile.name, id, ...associated, ...associated]);
+    if (rows.length > 0) {
+      const centerNames = await Promise.all(associated.map(async (cid) => {
+        const { rows: centerRows } = await query(ctx.env, 'SELECT name FROM centers WHERE id = ?', [cid]);
+        return centerRows[0]?.name;
+      }));
+      const conflictingCenters = centerNames.filter(Boolean).join(', ');
+      throw new HttpError(409, `A user with this name already exists in: ${conflictingCenters}`);
+    }
+  }
+  
   await transaction(ctx.env, [
     {
       sql: 'UPDATE users SET name = ?, gender = ?, is_admin = ?, associated_centers = ?, editor_for = ?, updated_at = ? WHERE id = ?',
-      args: [profile.name, profile.gender, isAdmin ? 1 : 0, JSON.stringify([...new Set([...profile.associated_centers, ...editorFor])]),
-        JSON.stringify(editorFor), new Date().toISOString(), id],
+      args: [profile.name, profile.gender, isAdmin ? 1 : 0, JSON.stringify(associated), JSON.stringify(editorFor), new Date().toISOString(), id],
     },
   ]);
   return json(200, { user: await loadUser(ctx, id) });

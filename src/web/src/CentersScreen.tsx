@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, Platform, ScrollView, Text, View } from 'react-native';
 import { ApiError, api, type Center, type User } from './api';
 import { ColorPicker } from './ColorPicker';
 import { usersWithEmail } from './userFilters';
-import { Badge, Button, Check, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
+import { AddButton, Badge, Button, Check, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
 
 const DEFAULT_COLOR = '#1e40af';
 const PRESETS = [
@@ -35,8 +35,14 @@ export function CentersScreen({ centers, users, reload }: { centers: Center[]; u
 
   return (
     <View style={{ flex: 1 }}>
-      <ManagementHeader title="Centers" description={`${shown.length === centers.length ? centers.length : `${shown.length}/${centers.length}`} centers · assign editors to manage each one`}
-        addLabel="Add center" onAdd={() => setEditing('new')} />
+      {Platform.OS !== 'web' ? (
+        <ManagementHeader title="Centers" description={`${shown.length === centers.length ? centers.length : `${shown.length}/${centers.length}`} centers · assign editors to manage each one`}
+          addLabel="Add center" onAdd={() => setEditing('new')} />
+      ) : (
+        <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <AddButton label="Add center" onPress={() => setEditing('new')} />
+        </View>
+      )}
       <View style={managementStyles.content}>
         <ManagementSearch label="Search centers" value={search} onChangeText={setSearch} />
         <ErrorText message={error} />

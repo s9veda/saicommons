@@ -145,8 +145,8 @@ function TabNavigation({ tab, onSelect, placement }: { tab: Tab; onSelect: (tab:
   const bottom = placement === 'bottom';
   return (
     <View accessibilityRole="tablist" style={bottom
-      ? { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 6 }
-      : { flexDirection: 'row', padding: 4, backgroundColor: colors.primaryLight, borderRadius: 14, marginBottom: 16 }}>
+      ? { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 0 }
+      : { flexDirection: 'row', padding: 4, backgroundColor: colors.primaryLight, borderRadius: 14, marginBottom: 0 }}>
       {(['centers', 'users'] as const).map((item) => (
         <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: tab === item }} onPress={() => onSelect(item)}
           style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: bottom ? 50 : 40, borderRadius: 10,
