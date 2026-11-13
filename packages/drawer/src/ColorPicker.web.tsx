@@ -1,9 +1,10 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { hexToRgb } from './color';
-import { colors } from './ui';
+import { useDrawerTheme } from './Context';
 
 export function ColorPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const colors = useDrawerTheme();
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={{ fontWeight: '600', color: colors.text, marginBottom: 6 }}>Choose a color</Text>

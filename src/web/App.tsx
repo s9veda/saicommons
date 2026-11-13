@@ -1,18 +1,38 @@
 import { StatusBar } from 'expo-status-bar';
-import { Building2, UsersRound } from 'lucide-react-native';
+import { LucideProvider } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Keyboard, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ApiError, api, loadToken, setToken, type Center, type User } from './src/api';
-import { CentersScreen } from './src/CentersScreen';
-import { ProfileButton, ProfileDrawer } from './src/ProfileDrawer';
-import { UsersScreen } from './src/UsersScreen';
-import { Button, ErrorText, colors } from './src/ui';
+import { ApiError, api, apiConfig, loadToken, setToken, type User } from './src/api';
+import { Button, ErrorText, defaultTheme as colors, ProfileButton, ProfileDrawer, DrawerThemeProvider, configureApi, createTheme } from '@saicommons/drawer';
 
-type Tab = 'centers' | 'users';
+configureApi(apiConfig);
+
+const appTheme = createTheme({
+  primary: colors.primary,
+  primaryLight: colors.primaryLight,
+  border: colors.border,
+  muted: colors.muted,
+  text: colors.text,
+  danger: colors.danger,
+  dangerLight: colors.dangerLight,
+  ok: colors.ok,
+  bg: colors.bg,
+  surface: colors.surface,
+  accent: colors.accent,
+  white: colors.white,
+});
 
 export default function App() {
-  return <SafeAreaProvider><AdminApp /></SafeAreaProvider>;
+  return (
+    <SafeAreaProvider>
+      <LucideProvider>
+        <DrawerThemeProvider theme={appTheme}>
+          <AdminApp />
+        </DrawerThemeProvider>
+      </LucideProvider>
+    </SafeAreaProvider>
+  );
 }
 
 function AdminApp() {
@@ -20,41 +40,13 @@ function AdminApp() {
   const [me, setMe] = useState<User | null>(null);
   const [booting, setBooting] = useState(true);
   const [restoreError, setRestoreError] = useState('');
-  const [centers, setCenters] = useState<Center[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [tab, setTab] = useState<Tab>('centers');
-  const [error, setError] = useState('');
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
-    return () => { show.remove(); hide.remove(); };
-  }, []);
 
   const signOut = useCallback(async () => {
     await setToken(null);
     setMe(null);
-    setCenters([]);
-    setUsers([]);
-    setError('');
     setProfileOpen(true);
   }, []);
-
-  const reload = useCallback(async () => {
-    try {
-      const [c, u] = await Promise.all([api.centers(), api.users()]);
-      setCenters(c);
-      setUsers(u);
-      setError('');
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        try { await signOut(); } catch { setError('Could not clear the saved session.'); }
-      }
-      else setError(e instanceof ApiError ? e.message : 'Failed to load data');
-    }
-  }, [signOut]);
 
   const restore = useCallback(async () => {
     setBooting(true);
@@ -62,7 +54,7 @@ function AdminApp() {
     try {
       if (await loadToken()) {
         try {
-          const { user } = await api.session();
+          const { user } = await api.getSession();
           if (user.is_admin) setMe(user); else await signOut();
         } catch (e) {
           if (e instanceof ApiError && e.status === 401) await signOut();
@@ -78,8 +70,6 @@ function AdminApp() {
 
   useEffect(() => { void restore(); }, [restore]);
 
-  useEffect(() => { if (me) void reload(); }, [me, reload]);
-
   let content: React.ReactNode;
   if (booting) {
     content = <ActivityIndicator style={{ marginTop: 80 }} />;
@@ -94,12 +84,10 @@ function AdminApp() {
     );
   } else {
     content = (
-      <View style={{ flex: 1, width: '100%' }}>
-        {Platform.OS === 'web' && <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16 }}><TabNavigation tab={tab} onSelect={setTab} placement="top" /></View>}
-        {error ? <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingHorizontal: 20 }}><ErrorText message={error} /></View> : null}
-        {tab === 'centers'
-          ? <CentersScreen centers={centers} users={users} reload={reload} />
-          : <UsersScreen users={users} centers={centers} me={me} reload={reload} />}
+      <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24 }}>
+        <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 24, fontWeight: '700', textAlign: 'center' }}>
+          Welcome to the Admin app. You are signed in.
+        </Text>
       </View>
     );
   }
@@ -123,42 +111,16 @@ function AdminApp() {
           </View>
         )}
       </View>
-      {me && !booting && !restoreError ? content : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom }}>
-          {content}
-        </ScrollView>
-      )}
-      {Platform.OS !== 'web' && me && !booting && !restoreError && !keyboardVisible && (
-        <View style={{ backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: insets.bottom }}>
-          <TabNavigation tab={tab} onSelect={setTab} placement="bottom" />
-        </View>
-      )}
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom }}>
+        {content}
+      </ScrollView>
       {!booting && !restoreError && (
         <ProfileDrawer visible={profileOpen} user={me} onClose={() => setProfileOpen(false)}
-          onSignedIn={(user) => { setMe(user); setProfileOpen(false); }} onSignOut={signOut} />
+          onSignedIn={(user) => { setMe(user); setProfileOpen(false); }} onSignOut={signOut}
+          enableManagement
+          signedOutDescription="Sign in with an administrator account to manage centers and users."
+          authConfig={{ checkPermissions: (user) => user.is_admin, permissionErrorMessage: 'This account is not an administrator.' }} />
       )}
-    </View>
-  );
-}
-
-function TabNavigation({ tab, onSelect, placement }: { tab: Tab; onSelect: (tab: Tab) => void; placement: 'top' | 'bottom' }) {
-  const bottom = placement === 'bottom';
-  return (
-    <View accessibilityRole="tablist" style={bottom
-      ? { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 0 }
-      : { flexDirection: 'row', padding: 4, backgroundColor: colors.primaryLight, borderRadius: 14, marginBottom: 0 }}>
-      {(['centers', 'users'] as const).map((item) => (
-        <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: tab === item }} onPress={() => onSelect(item)}
-          style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: bottom ? 50 : 40, borderRadius: 10,
-            backgroundColor: !bottom && tab === item ? colors.surface : 'transparent' }}>
-          {bottom && (item === 'centers'
-            ? <Building2 color={tab === item ? colors.primary : colors.muted} size={22} strokeWidth={1.8} />
-            : <UsersRound color={tab === item ? colors.primary : colors.muted} size={22} strokeWidth={1.8} />)}
-          <Text style={{ color: tab === item ? colors.primary : colors.muted, fontWeight: '700', fontSize: bottom ? 12 : 14 }}>
-            {item === 'centers' ? 'Centers' : 'Users'}
-          </Text>
-        </Pressable>
-      ))}
     </View>
   );
 }

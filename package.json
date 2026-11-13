@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
@@ -10,11 +13,15 @@
     "ios": "npm --prefix src run ios",
     "android": "npm --prefix src run android",
     "web": "npm --prefix src run web",
-    "typecheck:app": "npm --prefix src run typecheck"
+    "typecheck:app": "npm --prefix src run typecheck",
+    "typecheck:drawer": "npm --prefix packages/drawer run typecheck"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261103.1",
     "typescript": "^5.9.3",
     "wrangler": "^4.156.2"
+  },
+  "dependencies": {
+    "@react-native/assets-registry": "^0.88.1"
   }
 }

@@ -22,9 +22,11 @@ For native development, configure separate `admin-ios` and `admin-android` entri
 
 Run `npm run ios` on macOS with Xcode and CocoaPods, or `npm run android` with the Android SDK and an emulator or device. Expo Go can also run the shared app with `npm start`. The generated identifiers `org.s9veda.saicommons.admin` are placeholders: choose identifiers and configure platform signing before distribution. The Android release build is intentionally not configured with a release signing key.
 
+The admin icon source is `src/web/assets/admin-icon-source.png`. The Expo assets and checked-in iOS and Android launcher resources contain platform-sized variants; rebuild and reinstall the native apps after changing them.
+
 If Java is not on your path on macOS, Android Studio's bundled JDK can be used with `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` before running the Android command.
 
-The profile button opens the sign-in form or, when signed in, the account details and sign-out action. The web app stores its token in browser session storage; native apps use Expo SecureStore (Keychain/Keystore). Sign out deletes the local token, but the API has no server-side logout or refresh tokens.
+The profile button opens the sign-in form or, when signed in, account and center access details. Administrators can manage centers and users from the drawer. The web app stores its token in browser session storage; native apps use Expo SecureStore (Keychain/Keystore). Sign out deletes the local token, but the API has no server-side logout or refresh tokens.
 
 For deployments set `SESSION_SECRET`, `API_KEYS`, `ADMIN_API_KEY`, `ALLOWED_ORIGINS`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, and `BREVO_SENDER_NAME` with `wrangler secret put`. `API_KEYS` is a comma-separated list of `client=key` pairs, one per web/mobile app (see `.dev.vars.example`). Never commit secrets. With `BREVO_API_KEY` unset, OTP codes are logged to the Worker console (development only).
 

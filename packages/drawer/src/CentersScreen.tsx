@@ -3,7 +3,7 @@ import { FlatList, Pressable, Platform, ScrollView, Text, View } from 'react-nat
 import { ApiError, api, type Center, type User } from './api';
 import { ColorPicker } from './ColorPicker';
 import { usersWithEmail } from './userFilters';
-import { AddButton, Badge, Button, Check, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
+import { AddButton, Badge, Button, Check, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, confirmAction, useManagementTheme } from './managementUi';
 
 const DEFAULT_COLOR = '#1e40af';
 const PRESETS = [
@@ -13,6 +13,7 @@ const PRESETS = [
 ];
 
 export function CentersScreen({ centers, users, reload }: { centers: Center[]; users: User[]; reload: () => Promise<void> }) {
+  const { managementStyles } = useManagementTheme();
   const [editing, setEditing] = useState<Center | 'new' | null>(null);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -82,6 +83,7 @@ export function CentersScreen({ centers, users, reload }: { centers: Center[]; u
 }
 
 function CenterForm({ center, users, onClose, onSaved }: { center: Center | null; users: User[]; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { colors, managementStyles } = useManagementTheme();
   const [name, setName] = useState(center?.name ?? '');
   const [color, setColor] = useState(center?.badge_text_color ?? DEFAULT_COLOR);
   const [editorIds, setEditorIds] = useState<Set<string>>(new Set(center?.editor_ids ?? []));

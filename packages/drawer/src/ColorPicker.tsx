@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 import { hexToRgb, rgbToHex } from './color';
-import { colors } from './ui';
+import { useDrawerTheme } from './Context';
 
 const CHANNELS = ['Red', 'Green', 'Blue'] as const;
 const CHANNEL_COLORS = ['#d32f2f', '#168039', '#2563eb'];
 
 export function ColorPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const colors = useDrawerTheme();
   const [widths, setWidths] = useState([0, 0, 0]);
   const rgb = hexToRgb(value) ?? [0, 0, 0];
 

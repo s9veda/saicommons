@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Platform, Text, View } from 'react-native';
 import { ApiError, GENDERS, api, type Center, type User } from './api';
-import { AddButton, Badge, Button, Check, Chip, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, colors, confirmAction, managementStyles } from './ui';
+import { AddButton, Badge, Button, Check, Chip, ErrorText, Field, FormModal, ManagementHeader, ManagementSearch, RowActions, confirmAction, useManagementTheme } from './managementUi';
 
 const ROLES = ['all', 'admin', 'editor', 'viewer'] as const;
 
 export function UsersScreen({ users, centers, me, reload }: { users: User[]; centers: Center[]; me: User; reload: () => Promise<void> }) {
+  const { managementStyles } = useManagementTheme();
   const [editing, setEditing] = useState<User | 'new' | null>(null);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<(typeof ROLES)[number]>('all');
@@ -83,6 +84,7 @@ export function UsersScreen({ users, centers, me, reload }: { users: User[]; cen
 }
 
 function UserForm({ user, centers, onClose, onSaved }: { user: User | null; centers: Center[]; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { colors, managementStyles } = useManagementTheme();
   const [email, setEmail] = useState(user?.email ?? '');
   const [name, setName] = useState(user?.name ?? '');
   const [gender, setGender] = useState<string | null>(user?.gender ?? null);

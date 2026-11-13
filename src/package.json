@@ -8,7 +8,9 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit -p web/tsconfig.json"
+    "typecheck": "tsc --noEmit -p web/tsconfig.json",
+    "build-web": "expo export -p web --output-dir dist",
+    "deploy": "./deploy.sh"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",

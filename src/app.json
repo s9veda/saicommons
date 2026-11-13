@@ -14,7 +14,7 @@
     "android": {
       "package": "org.s9veda.saicommons.admin",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F7F4EC",
         "foregroundImage": "./web/assets/android-icon-foreground.png",
         "backgroundImage": "./web/assets/android-icon-background.png",
         "monochromeImage": "./web/assets/android-icon-monochrome.png"
