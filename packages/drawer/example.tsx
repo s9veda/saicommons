@@ -13,6 +13,9 @@ import {
   loadToken, 
   setToken,
   api,
+  ApiError,
+  Button,
+  ErrorText,
   type User,
   createTheme 
 } from '@saicommons/drawer';
@@ -39,46 +42,45 @@ export default function App() {
 function DrawerExampleApp() {
   const [me, setMe] = useState<User | null>(null);
   const [booting, setBooting] = useState(true);
+  const [restoreError, setRestoreError] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
 
-  // 3. Restore session on app start
-  const restore = useCallback(async () => {
-    setBooting(true);
-    try {
-      if (await loadToken()) {
-        try {
-          const { user } = await api.getSession();
-          // Check permissions if needed
-          if (user.is_admin) {
-            setMe(user);
-          } else {
-            await signOut();
-          }
-        } catch {
-          await signOut();
-        }
-      } else {
-        setProfileOpen(true); // Show login
-      }
-    } catch (e) {
-      console.error('Restore failed:', e);
-      setProfileOpen(true);
-    } finally {
-      setBooting(false);
-    }
-  }, []);
-
-  useEffect(() => { void restore(); }, [restore]);
-
-  // 4. Sign out handler
   const signOut = useCallback(async () => {
     await setToken(null);
     setMe(null);
     setProfileOpen(true);
   }, []);
 
+  // 3. Restore session on app start
+  const restore = useCallback(async () => {
+    setBooting(true);
+    setRestoreError('');
+    try {
+      if (await loadToken()) {
+        try {
+          const { user } = await api.getSession();
+          setMe(user);
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) await signOut();
+          else throw e;
+        }
+      } else {
+        setProfileOpen(true); // Show login
+      }
+    } catch (e) {
+      setRestoreError(e instanceof Error ? e.message : 'Could not restore the saved session.');
+    } finally {
+      setBooting(false);
+    }
+  }, [signOut]);
+
+  useEffect(() => { void restore(); }, [restore]);
+
   if (booting) {
     return <ActivityIndicator style={{ marginTop: 80 }} />;
+  }
+  if (restoreError) {
+    return <View><ErrorText message={restoreError} /><Button title="Retry" onPress={() => void restore()} /></View>;
   }
 
   return (
@@ -127,10 +129,6 @@ function DrawerExampleApp() {
         }}
         onSignOut={signOut}
         theme={appTheme}
-        authConfig={{
-          checkPermissions: (user) => user.is_admin,
-          permissionErrorMessage: 'Administrator access required'
-        }}
       />
     </View>
   );

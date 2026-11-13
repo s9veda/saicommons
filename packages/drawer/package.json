@@ -2,11 +2,17 @@
   "name": "@saicommons/drawer",
   "version": "0.1.0",
   "type": "module",
-  "main": "index.js",
+  "main": "./src/index.ts",
+  "react-native": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "!src/*.test.mjs"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./index.js"
+      "default": "./src/index.ts"
     },
     "./theme": "./src/theme.ts",
     "./types": "./src/types.ts"
@@ -19,7 +25,8 @@
     "react-native": "0.88.1",
     "expo-secure-store": "~58.0.2",
     "lucide-react-native": "^1.61.0",
-    "react-native-safe-area-context": "~5.11.1",
+    "react-native-safe-area-context": ">=5.10.1 <6",
+    "react-native-svg": "^15.0.0",
     "expo-status-bar": "~58.0.4"
   },
   "devDependencies": {
