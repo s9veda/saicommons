@@ -98,9 +98,10 @@ their API client shares the drawer's session.
 The sign-in form has no app-specific description by default. Hosts can supply
 `signedOutDescription` to show one, or `signedOutContent` to replace the form.
 
-Set `enableManagement` to expose center and user management to administrators.
+Set `enableManagement` to expose center and user management to administrators
+and scoped user management to center editors.
 The drawer opens the reusable management screens and uses the configured API
-and session for CRUD requests. The server must enforce administrator
+and session for CRUD requests. The server must enforce management
 permissions; hiding buttons is not authorization. Pass `onManagementChanged`
 to refresh the host app's own data after a change. Without this option,
 management remains hidden. Non-admin profiles show their associated and editor
@@ -211,8 +212,8 @@ Override default drawer sections:
 - `setToken(token)` - Save/clear auth token
 - `getToken()` - Get current token
 - `configureApi(config)` - Configure API client
-- `login(email)` - Login with email
-- `verifyOtp(email, code)` - Verify OTP
+- `login(email)` - Request an email code; returns a generic `LoginRequestResult`
+- `verifyOtp(email, code)` - Verify OTP; returns a `LoginResult` with user and token
 - `getSession()` - Get current session
 
 ### Types

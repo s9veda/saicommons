@@ -8,6 +8,10 @@ import { Button, ErrorText, defaultTheme as colors, ProfileButton, ProfileDrawer
 
 configureApi(apiConfig);
 
+function hasManagementAccess(user: User): boolean {
+  return user.is_admin || user.editor_for.length > 0;
+}
+
 const appTheme = createTheme({
   primary: colors.primary,
   primaryLight: colors.primaryLight,
@@ -48,6 +52,16 @@ function AdminApp() {
     setProfileOpen(true);
   }, []);
 
+  const refreshAfterManagement = useCallback(async () => {
+    try {
+      const { user } = await api.getSession();
+      if (hasManagementAccess(user)) setMe(user); else await signOut();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) await signOut();
+      else throw e;
+    }
+  }, [signOut]);
+
   const restore = useCallback(async () => {
     setBooting(true);
     setRestoreError('');
@@ -55,7 +69,7 @@ function AdminApp() {
       if (await loadToken()) {
         try {
           const { user } = await api.getSession();
-          if (user.is_admin) setMe(user); else await signOut();
+          if (hasManagementAccess(user)) setMe(user); else await signOut();
         } catch (e) {
           if (e instanceof ApiError && e.status === 401) await signOut();
           else throw e;
@@ -118,8 +132,9 @@ function AdminApp() {
         <ProfileDrawer visible={profileOpen} user={me} onClose={() => setProfileOpen(false)}
           onSignedIn={(user) => { setMe(user); setProfileOpen(false); }} onSignOut={signOut}
           enableManagement
-          signedOutDescription="Sign in with an administrator account to manage centers and users."
-          authConfig={{ checkPermissions: (user) => user.is_admin, permissionErrorMessage: 'This account is not an administrator.' }} />
+          onManagementChanged={refreshAfterManagement}
+          signedOutDescription="Sign in with an administrator or editor account to manage centers and users."
+          authConfig={{ checkPermissions: hasManagementAccess, permissionErrorMessage: 'This account cannot manage centers or users.' }} />
       )}
     </View>
   );

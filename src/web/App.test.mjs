@@ -10,8 +10,11 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const element = (type, props) => ({ type, props });
 const user = { id: '1', name: 'Test Admin', is_admin: true };
+let savedUser;
+let savedToken;
+class ApiError extends Error { constructor(status) { super('error'); this.status = status; } }
 const react = {
-  useState: (initial) => [initial === null ? user : initial === true ? false : initial, () => {}],
+  useState: (initial) => [initial === null ? user : initial === true ? false : initial, initial === null ? (value) => { savedUser = value; } : () => {}],
   useCallback: (callback) => callback,
   useEffect: () => {},
 };
@@ -22,7 +25,7 @@ const dependencies = {
   'lucide-react-native': { LucideProvider: 'LucideProvider' },
   'react-native': { ActivityIndicator: 'ActivityIndicator', Image: 'Image', ScrollView: 'ScrollView', Text: 'Text', View: 'View' },
   'react-native-safe-area-context': { SafeAreaProvider: 'SafeAreaProvider', useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
-  './src/api': { apiConfig: {}, api: {} },
+  './src/api': { ApiError, apiConfig: {}, api: {}, setToken: async (value) => { savedToken = value; } },
   '@saicommons/drawer': {
     Button: 'Button', ErrorText: 'ErrorText', ProfileButton: 'ProfileButton', ProfileDrawer: 'ProfileDrawer',
     defaultTheme: {}, configureApi() {}, createTheme: (theme) => theme,
@@ -51,5 +54,20 @@ test('signed-in home shows status and keeps management in the profile drawer', (
   const drawer = tree.find((node) => node?.type === 'ProfileDrawer');
   assert.equal(drawer.props.enableManagement, true);
   assert.equal(drawer.props.user, user);
-  assert.equal(drawer.props.signedOutDescription, 'Sign in with an administrator account to manage centers and users.');
+  assert.equal(drawer.props.signedOutDescription, 'Sign in with an administrator or editor account to manage centers and users.');
+  assert.equal(drawer.props.authConfig.checkPermissions({ is_admin: true, editor_for: [] }), true);
+  assert.equal(drawer.props.authConfig.checkPermissions({ is_admin: false, editor_for: [1] }), true);
+  assert.equal(drawer.props.authConfig.checkPermissions({ is_admin: false, editor_for: [] }), false);
+});
+
+test('management changes refresh the current role and clear a revoked session', async () => {
+  const drawer = walk(exports.AdminApp()).find((node) => node?.type === 'ProfileDrawer');
+  const editor = { id: '1', is_admin: false, editor_for: [1] };
+  dependencies['./src/api'].api.getSession = async () => ({ user: editor });
+  await drawer.props.onManagementChanged();
+  assert.equal(savedUser, editor);
+  dependencies['./src/api'].api.getSession = async () => { throw new ApiError(401); };
+  await drawer.props.onManagementChanged();
+  assert.equal(savedToken, null);
+  assert.equal(savedUser, null);
 });

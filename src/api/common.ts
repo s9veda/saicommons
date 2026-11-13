@@ -17,6 +17,7 @@ export interface Ctx {
   params: string[];
   /** Who is acting: the admin user's email for admin-token calls, `admin-key` for the server key. */
   actor: string;
+  principal: { id: string; isAdmin: boolean; editorFor: number[]; sessionVersion: number } | null;
 }
 
 export const encoder = new TextEncoder();
@@ -104,14 +105,14 @@ export async function identifyClient(request: Request, env: Env): Promise<string
   return client;
 }
 
-export async function issueToken(env: Env, userId: string, client: string): Promise<string> {
+export async function issueToken(env: Env, userId: string, client: string, version: number, authentication: 'otp' | 'name'): Promise<string> {
   const iat = Math.floor(Date.now() / 1000);
   const head = b64url(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const body = b64url(encoder.encode(JSON.stringify({ sub: userId, client, iat, exp: iat + SESSION_TTL_SECONDS })));
+  const body = b64url(encoder.encode(JSON.stringify({ sub: userId, client, ver: version, auth: authentication, iat, exp: iat + SESSION_TTL_SECONDS })));
   const signature = await crypto.subtle.sign('HMAC', await hmacKey(env.SESSION_SECRET!, 'sign'), encoder.encode(`${head}.${body}`));
   return `${head}.${body}.${b64url(new Uint8Array(signature))}`;
 }
-export async function verifyToken(env: Env, token: string): Promise<{ sub: string; client: string } | null> {
+export async function verifyToken(env: Env, token: string): Promise<{ sub: string; client: string; version: number; authentication: 'otp' | 'name' | null } | null> {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {
@@ -120,13 +121,16 @@ export async function verifyToken(env: Env, token: string): Promise<{ sub: strin
     if (header.alg !== 'HS256' || header.typ !== 'JWT') return null;
     const valid = await crypto.subtle.verify('HMAC', await hmacKey(env.SESSION_SECRET!, 'verify'), unb64url(signature), encoder.encode(`${head}.${body}`));
     if (!valid) return null;
-    const claims = JSON.parse(decoder.decode(unb64url(body))) as { sub?: unknown; client?: unknown; exp?: unknown; iat?: unknown };
+    const claims = JSON.parse(decoder.decode(unb64url(body))) as { sub?: unknown; client?: unknown; ver?: unknown; auth?: unknown; exp?: unknown; iat?: unknown };
     const now = Math.floor(Date.now() / 1000);
     if (typeof claims.sub !== 'string' || typeof claims.client !== 'string' || typeof claims.exp !== 'number' || typeof claims.iat !== 'number') return null;
-    return claims.exp > now && claims.iat <= now + 60 ? { sub: claims.sub, client: claims.client } : null;
+    if (claims.ver !== undefined && (!Number.isSafeInteger(claims.ver) || Number(claims.ver) < 0)) return null;
+    if (claims.auth !== undefined && claims.auth !== 'otp' && claims.auth !== 'name') return null;
+    return claims.exp > now && claims.iat <= now + 60
+      ? { sub: claims.sub, client: claims.client, version: Number(claims.ver ?? 0), authentication: claims.auth ?? null } : null;
   } catch { return null; }
 }
-export function bearerClaims(request: Request, env: Env): Promise<{ sub: string; client: string } | null> {
+export function bearerClaims(request: Request, env: Env): ReturnType<typeof verifyToken> {
   const match = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') ?? '');
   return match ? verifyToken(env, match[1]) : Promise.resolve(null);
 }

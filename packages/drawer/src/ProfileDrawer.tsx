@@ -84,6 +84,8 @@ export function ProfileDrawer({
 
   const colors = createColors(theme);
   const styles = getDrawerStyles(theme);
+  const canManageUsers = !!user && (user.is_admin || user.editor_for.length > 0);
+  const canManageCenters = !!user?.is_admin;
   const needsCenters = !!user && !user.is_admin && (user.editor_for.length > 0 || user.associated_centers.length > 0);
   const currentCenters = needsCenters && centerState?.userId === user?.id ? centerState : null;
 
@@ -92,7 +94,7 @@ export function ProfileDrawer({
       <Modal visible={visible} transparent animationType="none" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={management ? () => setManagement(null) : close}>
         <StatusBar style="dark" />
         <SafeAreaProvider style={{ flex: 1 }}>
-          {management && user?.is_admin && enableManagement ? (
+          {management && user && enableManagement && (management === 'centers' ? canManageCenters : canManageUsers) ? (
             <SafeAreaView edges={['top', 'right', 'bottom', 'left']} style={{ flex: 1, backgroundColor: theme.bg }}>
               <ManagementView section={management} user={user} onBack={() => setManagement(null)} onChanged={onManagementChanged} />
             </SafeAreaView>
@@ -118,9 +120,11 @@ export function ProfileDrawer({
                             {renderCenterAccessSection(styles, colors, user, new Map((currentCenters?.centers ?? []).map((center) => [center.id, center.name])), needsCenters && (currentCenters?.loading ?? true), currentCenters?.error ?? '', () => setCentersRevision((value) => value + 1))}
                           </>
                         )}
-                        {enableManagement && user.is_admin && (
+                        {enableManagement && canManageCenters && (
+                          renderManagementButton(styles, colors, 'centers', () => setManagement('centers'))
+                        )}
+                        {enableManagement && canManageUsers && (
                           <>
-                            {renderManagementButton(styles, colors, 'centers', () => setManagement('centers'))}
                             {renderManagementButton(styles, colors, 'users', () => setManagement('users'))}
                           </>
                         )}

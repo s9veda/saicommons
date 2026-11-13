@@ -5,7 +5,7 @@ import type { User, ProfileButtonProps, DrawerTheme } from './types';
 import { defaultTheme } from './theme';
 
 export function ProfileButton({ user, onPress, theme }: ProfileButtonProps) {
-  const resolvedTheme = theme ?? defaultTheme;
+  const resolvedTheme = { ...defaultTheme, ...theme };
   
   const styleObj = StyleSheet.create({
     profileButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#426756', alignItems: 'center', justifyContent: 'center' },

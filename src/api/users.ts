@@ -2,8 +2,9 @@ import { query } from './turso';
 import { HttpError, type Env } from './common';
 
 export interface UserRow {
-  id: string; email: string; name: string; gender: string | null;
+  id: string; email: string | null; name: string; gender: string | null;
   is_admin: number | null; associated_centers: string | null; editor_for: string | null;
+  session_version: number;
 }
 export interface Profile { name: string; gender: string | null; associated_centers: number[] }
 
@@ -11,7 +12,7 @@ export interface Profile { name: string; gender: string | null; associated_cente
 const GENDERS = ['Male', 'Female', 'Boy', 'Girl', 'Other'];
 
 export const USER_SELECT = `SELECT u.id, u.email, u.name, u.gender, u.is_admin,
-  u.associated_centers, u.editor_for FROM users u`;
+  u.associated_centers, u.editor_for, u.session_version FROM users u`;
 
 function parseIds(value: string | null): number[] {
   if (value === null) return [];

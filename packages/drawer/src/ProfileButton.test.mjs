@@ -35,3 +35,9 @@ test('signing in keeps the profile button size while adding the status dot', () 
   assert.equal(signedOut.props.children[1], null);
   assert.equal(signedIn.props.children[1].type, 'View');
 });
+
+test('partial theme overrides retain default colors', () => {
+  const button = exports.ProfileButton({ user: {}, onPress() {}, theme: { primary: '#123456' } });
+  assert.equal(button.props.children[0].props.color, '#fff');
+  assert.equal(button.props.children[1].props.style.borderColor, '#123456');
+});

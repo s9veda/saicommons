@@ -6,6 +6,22 @@ export interface QueryResult { rows: Row[]; changes: number }
 
 interface WireValue { type: string; value?: string | number }
 
+export class IntegrityConflict extends Error {}
+export class ManagementAuthorizationLost extends Error {}
+
+function statementError(error: unknown): Error {
+  const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : '';
+  if (message.includes('SAI_MANAGER_AUTH')) return new ManagementAuthorizationLost('Management authorization changed');
+  if (message.includes('SAI_NAME_CONFLICT')) return new IntegrityConflict('A user with this name already exists in a selected center');
+  if (message.includes('SAI_CENTER_IN_USE')) return new IntegrityConflict('The center is still associated with users');
+  if (message.includes('SAI_UNKNOWN_CENTER')) return new IntegrityConflict('A selected center no longer exists');
+  if (message.includes('users.email') || message.includes('users_normalized_email')) return new IntegrityConflict('A user with this email already exists');
+  if (/SAI_(NAME_KEY_REQUIRED|INVALID_EMAIL|CENTER_REQUIRED|EMAIL_REQUIRED|INVALID_PAIR|EDITOR_CENTER)/.test(message)) {
+    return new IntegrityConflict('The user does not meet the required role, email, pair, or center rules');
+  }
+  return new Error('Turso statement failed');
+}
+
 function encodeArg(value: SqlValue): WireValue {
   if (value === null) return { type: 'null' };
   if (typeof value === 'number') return { type: 'integer', value: String(Math.trunc(value)) };
@@ -33,12 +49,12 @@ async function pipeline(env: TursoEnv, statements: Array<{ sql: string; args?: S
   });
   if (!response.ok) throw new Error(`Turso request failed with status ${response.status}`);
   const body = await response.json() as {
-    results?: Array<{ type: string; response?: { result?: { cols: Array<{ name: string }>; rows: WireValue[][]; affected_row_count?: number } } }>;
+    results?: Array<{ type: string; error?: unknown; response?: { result?: { cols: Array<{ name: string }>; rows: WireValue[][]; affected_row_count?: number } } }>;
   };
   return statements.map((_, i): QueryResult => {
     const entry = body.results?.[i];
     const result = entry?.response?.result;
-    if (entry?.type !== 'ok' || !result) throw new Error('Turso statement failed');
+    if (entry?.type !== 'ok' || !result) throw statementError(entry?.error);
     const rows = result.rows.map((cells) => Object.fromEntries(result.cols.map((col, c) => [col.name, decodeValue(cells[c])])));
     return { rows, changes: result.affected_row_count ?? 0 };
   });
@@ -75,6 +91,7 @@ export async function transaction(env: TursoEnv, statements: Array<{ sql: string
   };
   const result = body.results?.[0];
   if (result?.type !== 'ok' || !result.response?.result?.step_results?.[commit] || result.response.result.step_errors?.[commit]) {
-    throw new Error('Turso transaction failed');
+    const error = result?.response?.result?.step_errors?.find((item) => item);
+    throw error ? statementError(error) : new Error('Turso transaction failed');
   }
 }

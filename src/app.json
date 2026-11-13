@@ -6,7 +6,9 @@
     "orientation": "portrait",
     "icon": "./web/assets/icon.png",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-secure-store"],
+    "plugins": [
+      "expo-secure-store"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.s9veda.saicommons.admin"
@@ -22,6 +24,11 @@
     },
     "web": {
       "favicon": "./web/assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "16d82538-76a9-4323-ae00-bc6ff98e4f69"
+      }
     }
   }
 }

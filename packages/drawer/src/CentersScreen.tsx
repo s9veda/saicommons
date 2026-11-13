@@ -92,7 +92,7 @@ function CenterForm({ center, users, onClose, onSaved }: { center: Center | null
   const [busy, setBusy] = useState(false);
   const validColor = /^#[0-9a-fA-F]{6}$/.test(color);
   const eligibleUsers = usersWithEmail(users);
-  const shown = eligibleUsers.filter((u) => `${u.name} ${u.email}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  const shown = eligibleUsers.filter((u) => `${u.name} ${u.email ?? ''}`.toLowerCase().includes(filter.trim().toLowerCase()));
   const visibleEditorCount = eligibleUsers.filter((user) => editorIds.has(user.id)).length;
   const hiddenEditorCount = editorIds.size - visibleEditorCount;
 

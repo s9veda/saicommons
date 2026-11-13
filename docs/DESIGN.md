@@ -11,22 +11,22 @@ additional details.
 
 | Endpoint | Body | Result |
 |---|---|---|
-| `POST /v1/register` | `email`, `name` (req); `gender` (opt: `Male`/`Female`/`Boy`/`Girl`/`Other`, case-insensitive); `associated_centers` (opt: array of existing center ids) | Sends an OTP; the user is created only after verification |
-| `POST /v1/register-name` | `name` (req); `gender`, `associated_centers`, `editor_for` (opt; center IDs must exist) | Immediately creates a user with no email and returns `{"user": {...}, "token": "..."}` (201), without email verification |
+| `POST /v1/register` | `email`, `name`, `associated_centers` (exactly one existing center) | Sends an OTP; the user is created only after verification |
+| `POST /v1/register-name` | `name`, `associated_centers` (exactly one existing center) | Immediately creates a user with no email and returns `{"user": {...}, "token": "..."}` (201), without email verification |
 | `POST /v1/login` | `email` | Sends an OTP if the user exists |
 | `POST /v1/verify-otp` | `email`, `otp_code` (6 digits) | `{"user": {...}, "token": "..."}` |
 | `GET /v1/session` | `Authorization: Bearer <token>` | `{"user": {...}}` |
 
-`register` and `login` return the same generic `{"ok":true,"message":...}` whether or not the account exists, so they do not reveal registered emails. Registering an existing email sends a code but never overwrites the stored profile or centers. Failure to send a register email returns 503. There is no logout endpoint: tokens are stateless, so clients discard them (deleting the user revokes immediately).
+`register` and `login` return the same generic `{"ok":true,"message":...}` whether or not the account exists, so they do not reveal registered emails. Registering an existing email sends a code but never overwrites the stored profile or centers. Failure to send a register email returns 503. There is no logout endpoint: clients discard their tokens; deleting a user or incrementing their session version revokes them.
 
-User objects: `id`, `email` (nullable), `name`, `gender`, `associated_centers` (centers the user can view), `editor_for` (centers the user may edit; a subset of `associated_centers`), `is_admin`, and a derived `role`: `admin` if `is_admin`, else `editor` if `editor_for` is non-empty, else `viewer` (the saisongs rules). Email/OTP registration creates a viewer. The name-only endpoint accepts `editor_for` from any client-key holder and includes those centers in `associated_centers`; neither it nor the email field proves identity. Only admin operations grant `is_admin`.
+User objects: `id`, `email` (nullable), `name`, `gender`, `associated_centers`, `editor_for`, `is_admin`, and a derived `role`. Self-registration creates a viewer and rejects role fields and pair names.
 
 **Trust boundary:** client keys are embedded in apps and are not authentication.
 Name-only registration does not use the OTP request throttle. Do not treat
-name-only users or their self-selected editor roles as verified
-identities or use those roles to authorize sensitive operations without
-additional server-side controls. Name-only accounts have no email OTP login
-path; the returned token is their session.
+name-only users as verified identities. Name-only accounts have no email OTP
+login path; their tokens cannot authorize management. Management requires an
+OTP-authenticated session. Unrevoked legacy tokens remain valid for viewer
+sessions, but privileged users must sign in again with OTP.
 
 ### Centers
 
@@ -44,27 +44,72 @@ Modeled on saisongs' `centers` (name unique case-insensitively, `badge_text_colo
 | Endpoint | Body | Result |
 |---|---|---|
 | `POST /v1/admin/users/import` | `{"users":[{email, name, gender?, associated_centers?, is_admin?, editor_for?}]}` (1-100) | Upserts by email in one transaction; keeps existing ids; replaces the user's center links; unknown centers are rejected |
-| `GET /v1/admin/users` | - | All users |
-| `POST /v1/admin/users` / `PUT /v1/admin/users/:id` / `DELETE /v1/admin/users/:id` | user fields (`email` is optional on create and unchanged on PUT; PUT replaces the other profile fields) | Create, update, delete; update/delete protect the last admin and prevent an admin from demoting or deleting themselves |
+| `GET /v1/admin/users` | - | All users for admins; overlapping users for editors |
+| `POST /v1/admin/users` / `PUT /v1/admin/users/:id` / `DELETE /v1/admin/users/:id` | User fields; email may be edited and `revoke_sessions` requests revocation on update | Editors may create users only in their centers and edit/delete non-admin users whose memberships are entirely within those centers |
 | `POST /v1/admin/users/delete` | `{email}` | Removes the user and their center links |
 
-**Admin authorization** is either `X-Admin-Key` (`ADMIN_API_KEY`, server-to-server; actor recorded as `admin-key`) or a client key plus the bearer token of a user with `is_admin` (actor recorded as the admin's email). The admin check reads the database on every request, so removing admin rights takes effect immediately.
-Import upserts do not apply the update/delete last-admin or self-demotion
-checks; handle imports with care.
+**Management authorization** is either `X-Admin-Key` (`ADMIN_API_KEY`, server-to-server) or a client key plus an OTP-authenticated bearer token of an administrator or editor. Center management and import remain admin-only. Import cannot remove an existing admin's role; use user editing for that.
+
+Non-admin users need at least one center; admins and editors need an email.
+A name containing `&` is a pair and must contain exactly two nonempty names;
+pairs cannot have email or privileged roles. Email edits do not require OTP.
+The drawer selects session revocation by default when changing an email; promotion
+of an email-less user forces revocation.
+
+Names of email-less users must be unique within each associated center against
+all users; a later email-bearing user cannot introduce such a conflict either.
+Comparison trims whitespace and uses Unicode 17.0 full default case folding
+(for example, `Straße` and `STRASSE` match). It does not apply Unicode
+normalization, so canonically equivalent composed and decomposed strings are
+not automatically combined. Two email-bearing users may have the same name.
+Database triggers enforce name and membership constraints atomically; conflicts
+return 409. Self-registration accepts exactly one center, while managers may
+associate users and pairs with several.
 
 ## Admin app and shared drawer
 
-The Expo Admin app uses `src/index.ts` and the shared UI in `src/web/`, with native projects in `src/ios/` and `src/android/`. It accepts administrator email OTP sign-in and displays center/user management in the profile drawer; the signed-in home screen is a welcome message. A platform-specific `EXPO_PUBLIC_API_KEY` identifies the client. Browser tokens use `sessionStorage`; native tokens use Expo SecureStore. The web origin must be in `ALLOWED_ORIGINS`. Native builds require a device-reachable API URL and platform signing for distribution.
+The Expo Admin app uses `src/index.ts` and the shared UI in `src/web/`, with native projects in `src/ios/` and `src/android/`. It accepts administrator and editor email OTP sign-in and displays management in the profile drawer; the signed-in home screen is a welcome message. A platform-specific `EXPO_PUBLIC_API_KEY` identifies the client. Browser tokens use `sessionStorage`; native tokens use Expo SecureStore. The web origin must be in `ALLOWED_ORIGINS`. Native builds require a device-reachable API URL and platform signing for distribution.
 
 The drawer lives in `packages/drawer/` and can be consumed by other Expo hosts on web, iOS, and Android. Hosts configure its API, session, theme, and optional management and content; its default authentication and management use the Sai Commons API. See the [drawer README](../packages/drawer/README.md) for packaging, peer dependencies, and adapting other user models. It is not automatically published or integrated into sibling apps.
 
 ## Data (Turso)
 
-See [database/0001_init.sql](../database/0001_init.sql): `centers`, `users` (center memberships and editor permissions in JSON arrays `associated_centers` and `editor_for`), `otp_codes` (one active code per email, pending registration profile, attempts), and `otp_request_log` (throttling). The code checks center and user references itself. Center IDs are numeric in API responses and arrays, and stored as decimal text in `centers.id`. The initialization script creates new tables; it does not upgrade existing tables.
+See [database/schema.sql](../database/schema.sql): `centers`, `users` (center memberships and editor permissions in JSON arrays `associated_centers` and `editor_for`), `otp_codes` (one active code per email, pending registration profile, attempts), and `otp_request_log` (throttling). The code checks center and user references itself. Center IDs are numeric in API responses and arrays, and stored as decimal text in `centers.id`. The schema initializes new databases; it does not upgrade existing tables.
 
-Existing databases must have a unique `users.email` constraint or index for user import and unambiguous authentication. The initialization script creates a partial unique index on non-null emails. Before applying it to an existing database, back up the database, normalize emails to lowercase with surrounding whitespace removed, and resolve duplicates explicitly. To identify duplicates, run `SELECT lower(trim(email)), count(*) FROM users WHERE email IS NOT NULL GROUP BY lower(trim(email)) HAVING count(*) > 1;`. Do not automatically delete or merge users: their roles and center associations may differ.
+### Upgrade and preflight
 
-The token is a 30-day HS256 JWT-shaped bearer (`sub` = user id, `client`) signed with `SESSION_SECRET`.
+Back up the database and stop writes before upgrading. Set `TURSO_DATABASE_URL`
+and `TURSO_AUTH_TOKEN` in the shell and run:
+
+```sh
+node scripts/database-preflight.mjs --live
+node scripts/database-preflight.mjs --live --apply
+```
+
+The first command only reads data and reports user IDs and conflicts. Correct
+each reported record explicitly; it never merges, normalizes, deletes or
+demotes data. The second command rechecks and applies the integrity schema in a
+conditional transaction. It aborts if user or center data changed since its
+snapshot. The upgrade adds a missing session version without resetting existing
+versions, and refuses to modify a database that already has `name_key`.
+For an offline snapshot, run the `SNAPSHOT_QUERY` exported by
+`scripts/database-preflight.mjs` against the database, save the resulting JSON
+value privately, and pass its filename instead of `--live`. The `--apply`
+option still needs database credentials. Delete any local snapshot after use.
+
+The migration adds a case-folded `name_key`, checks role, pair, center and
+collision invariants in triggers, and adds a normalized-email index alongside
+the existing partial unique email index. All trusted writers must use the
+shared `nameKey` function when inserting or renaming users and normalize emails
+as the Worker does; database clients bypassing the Worker must honor this
+contract. The migration and Unicode case-folding data are versioned together.
+Deploy the Worker after migration and before resuming writes. Test this
+sequence against a database copy first. A rollback requires restoring the
+backup and the matching previous Worker; do not drop the integrity schema
+while the new Worker is running.
+
+The token is a 30-day HS256 JWT-shaped bearer signed with `SESSION_SECRET`,
+including the user, client, session version, and authentication method.
 
 ## Securing the API
 

@@ -13,7 +13,8 @@ export interface Center {
 }
 
 export interface UserInput {
-  email?: string;
+  email?: string | null;
+  revoke_sessions?: boolean;
   name: string;
   gender: string | null;
   is_admin: boolean;
@@ -26,6 +27,11 @@ export const GENDERS = ['Male', 'Female', 'Boy', 'Girl', 'Other'];
 export interface LoginResult {
   user: User;
   token: string;
+}
+
+export interface LoginRequestResult {
+  ok: boolean;
+  message: string;
 }
 
 export class ApiError extends Error {
@@ -100,10 +106,27 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError('Cannot reach the server', 0, {});
+    throw new ApiError(
+      Platform.OS === 'web'
+        ? 'Cannot reach the server. Check the API URL and browser CORS settings.'
+        : 'Cannot reach the server. Check the API URL and network connection.',
+      0,
+      {}
+    );
   }
   
-  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    if (response.ok) throw new ApiError('Server returned an invalid JSON response', response.status, {});
+  }
+  if (response.ok && (!payload || typeof payload !== 'object' || Array.isArray(payload))) {
+    throw new ApiError('Server returned an invalid JSON response', response.status, {});
+  }
+  const data = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
   if (!response.ok) {
     throw new ApiError(
       typeof data.error === 'string' ? data.error : `Request failed (${response.status})`,
@@ -115,9 +138,9 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 }
 
 /** Login with email */
-export async function login(email: string, config?: AuthConfig): Promise<LoginResult> {
+export async function login(email: string, config?: AuthConfig): Promise<LoginRequestResult> {
   const endpoint = config?.loginEndpoint ?? '/v1/login';
-  return request<LoginResult>(endpoint, 'POST', { email });
+  return request<LoginRequestResult>(endpoint, 'POST', { email });
 }
 
 /** Verify OTP code */
@@ -142,6 +165,10 @@ export const api = {
   deleteCenter: (id: number) => request(`/v1/centers/${id}`, 'DELETE'),
   users: () => request<{ users: User[] }>('/v1/admin/users').then((result) => result.users),
   saveUser: (id: string | null, input: UserInput) =>
-    request<{ user: User }>(id === null ? '/v1/admin/users' : `/v1/admin/users/${id}`, id === null ? 'POST' : 'PUT', input),
+    request<{ user: User }>(
+      id === null ? '/v1/admin/users' : `/v1/admin/users/${id}`,
+      id === null ? 'POST' : 'PUT',
+      id === null ? input : { ...input, email: input.email ?? null, revoke_sessions: input.revoke_sessions ?? false },
+    ),
   deleteUser: (id: string) => request(`/v1/admin/users/${id}`, 'DELETE'),
 };

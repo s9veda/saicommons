@@ -1,12 +1,23 @@
+# Copy to src/api/.dev.vars for local Wrangler development; never commit real values.
+# Required: long random secret for session signatures and OTP hashes. Changing it
+# invalidates existing sessions and outstanding OTPs.
 SESSION_SECRET=replace-with-a-long-random-secret
-# Comma-separated client=key pairs: one key per web/mobile app so each can be rotated independently.
-API_KEYS=mantrajapam-web=sc_replace,mantrajapam-ios=sc_replace,mantrajapam-android=sc_replace,bhajanstudio-web=sc_replace,bhajanstudio-ios=sc_replace,bhajanstudio-android=sc_replace,admin-web=sc_replace
+# Client endpoints require comma-separated client=key pairs. Replace each
+# placeholder with a distinct value; keys in apps are public identifiers.
+API_KEYS=mantrajapam-web=replace-mantrajapam-web,mantrajapam-ios=replace-mantrajapam-ios,mantrajapam-android=replace-mantrajapam-android,bhajanstudio-web=replace-bhajanstudio-web,bhajanstudio-ios=replace-bhajanstudio-ios,bhajanstudio-android=replace-bhajanstudio-android,admin-web=replace-admin-web
+# Exact, comma-separated browser origins, including scheme and port. Add the
+# local Expo web origin; an empty list rejects requests that have an Origin.
 ALLOWED_ORIGINS=https://example.org,https://app.example.org
-# `admin-web` is the client key used by the Expo admin app in src/web/.
-# Server-to-server key for /v1/admin/* (user import); never ship it in an app.
+# Server-to-server key for admin operations. Use a different secret from
+# SESSION_SECRET; never ship it in an app.
 ADMIN_API_KEY=replace-with-a-different-long-random-secret
+# Required Turso database URL and database-scoped authentication token.
 TURSO_DATABASE_URL=libsql://your-db-your-org.turso.io
 TURSO_AUTH_TOKEN=
+# Brevo credentials for sending OTP email. If the key is empty, the Worker
+# logs OTP codes instead of sending email; use that only for local development.
 BREVO_API_KEY=
+# Verified Brevo sender email and display name. Defaults when omitted are
+# noreply@example.org and Sai Commons; configure a valid sender in production.
 BREVO_SENDER_EMAIL=noreply@example.org
 BREVO_SENDER_NAME=Sai Commons

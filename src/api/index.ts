@@ -1,4 +1,4 @@
-import { query, transaction } from './turso';
+import { IntegrityConflict, ManagementAuthorizationLost, query, transaction } from './turso';
 import {
   HttpError, bearerClaims, equalHex, hmacHex, identifyClient, issueToken, json, normalizeEmail, readJson, sha256,
   type Ctx, type Env,
@@ -6,7 +6,7 @@ import {
 import { USER_SELECT, assertCentersExist, parseProfile, publicUser, type Profile, type UserRow } from './users';
 import { adminCreate, adminDelete, adminDeleteById, adminImport, adminList, adminUpdate } from './admin';
 import { createCenter, deleteCenter, getCenter, listCenters, updateCenter } from './centers';
-import { parseCenterList } from './users';
+import { nameKey } from './name-key.mjs';
 
 const OTP_TTL_MS = 10 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -81,11 +81,23 @@ async function issueOtp(env: Env, email: string, purpose: 'register' | 'login', 
   return sent;
 }
 
+function selfRegistrationProfile(payload: Record<string, unknown>): Profile {
+  if (Object.keys(payload).some((key) => !['email', 'name', 'associated_centers'].includes(key))) {
+    throw new HttpError(400, 'Only email, name, and one center may be provided');
+  }
+  const profile = parseProfile(payload);
+  if (!Array.isArray(payload.associated_centers) || payload.associated_centers.length !== 1 || profile.associated_centers.length !== 1) {
+    throw new HttpError(400, 'Exactly one center is required');
+  }
+  if (profile.name.includes('&')) throw new HttpError(400, 'Pairs cannot self-register');
+  return profile;
+}
+
 async function register({ request, env, client }: Ctx): Promise<Response> {
   const payload = await readJson(request);
   const email = normalizeEmail(payload.email);
   if (!email) throw new HttpError(400, 'A valid email is required');
-  const profile = parseProfile(payload);
+  const profile = selfRegistrationProfile(payload);
   await assertCentersExist(env, profile.associated_centers);
   await reserveOtpSlot(env, request, email, client);
   // Existing accounts get the same response and an OTP, but their stored profile is never overwritten.
@@ -95,28 +107,20 @@ async function register({ request, env, client }: Ctx): Promise<Response> {
 
 async function registerName({ request, env, client }: Ctx): Promise<Response> {
   const payload = await readJson(request);
-  // Email is explicitly NOT required for this endpoint
-  const profile = parseProfile(payload);
-  // Allow empty associated_centers if not provided, but validate if provided
-  if (profile.associated_centers.length > 0) {
-    await assertCentersExist(env, profile.associated_centers);
-  }
-  const editorFor = parseCenterList(payload.editor_for, 'editor_for');
-  if (editorFor.length > 0) {
-    await assertCentersExist(env, editorFor);
-  }
-  const associated = [...new Set([...profile.associated_centers, ...editorFor])];
+  if (payload.email != null && payload.email !== '') throw new HttpError(400, 'Use email registration when providing an email');
+  const profile = selfRegistrationProfile(payload);
+  await assertCentersExist(env, profile.associated_centers);
   
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await transaction(env, [
     {
-      sql: `INSERT INTO users (id, email, name, gender, is_admin, registered_via, associated_centers, editor_for, created_at, updated_at)
-        VALUES (?, NULL, ?, ?, 0, 'name-registration', ?, ?, ?, ?)`,
-      args: [id, profile.name, profile.gender, JSON.stringify(associated), JSON.stringify(editorFor), now, now],
+      sql: `INSERT INTO users (id, email, name, name_key, gender, is_admin, registered_via, associated_centers, editor_for, created_at, updated_at)
+        VALUES (?, NULL, ?, ?, ?, 0, 'name-registration', ?, ?, ?, ?)`,
+      args: [id, profile.name, nameKey(profile.name), profile.gender, JSON.stringify(profile.associated_centers), '[]', now, now],
     },
   ]);
-  const token = await issueToken(env, id, client);
+  const token = await issueToken(env, id, client, 0, 'name');
   const { rows } = await query(env, `${USER_SELECT} WHERE u.id = ?`, [id]);
   return json(201, { user: publicUser(rows[0] as unknown as UserRow), token });
 }
@@ -156,38 +160,46 @@ async function verifyOtp({ request, env, client }: Ctx): Promise<Response> {
     const exists = await query(env, 'SELECT id FROM users WHERE email = ?', [email]);
     if (exists.rows.length === 0) {
       const profile = JSON.parse(String(otp.profile)) as Profile;
+      if (!Array.isArray(profile.associated_centers) || profile.associated_centers.length !== 1) {
+        throw new HttpError(409, 'Registration details have expired; please register again');
+      }
       const id = crypto.randomUUID();
-      await transaction(env, [
-        {
-          sql: `INSERT INTO users (id, email, name, gender, registered_via, associated_centers, editor_for, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, (SELECT json_group_array(id) FROM
-              (SELECT CAST(id AS INTEGER) AS id FROM centers WHERE CAST(id AS INTEGER) IN (${profile.associated_centers.map(() => '?').join(',') || 'NULL'}))), '[]', ?, ?)`,
-          args: [id, email, profile.name, profile.gender, client, ...profile.associated_centers, now, now],
-        },
-      ]);
+      const inserted = await query(env, `INSERT INTO users (id, email, name, name_key, gender, registered_via, associated_centers, editor_for, created_at, updated_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, '[]', ?, ? WHERE EXISTS (SELECT 1 FROM centers WHERE CAST(id AS INTEGER) = ?)
+        ON CONFLICT(email) WHERE email IS NOT NULL DO NOTHING RETURNING id`,
+      [id, email, profile.name, nameKey(profile.name), profile.gender, client, JSON.stringify(profile.associated_centers), now, now, profile.associated_centers[0]]);
+      if (inserted.rows.length === 0 && (await query(env, 'SELECT id FROM users WHERE email = ?', [email])).rows.length === 0) {
+        throw new HttpError(409, 'The selected center no longer exists; please register again');
+      }
     }
   }
   const updated = await query(env, 'UPDATE users SET last_login_at = ? WHERE email = ? RETURNING id', [now, email]);
   if (updated.rows.length === 0) throw invalid;
   const userId = String(updated.rows[0].id);
   const { rows: users } = await query(env, `${USER_SELECT} WHERE u.id = ?`, [userId]);
-  return json(200, { user: publicUser(users[0] as unknown as UserRow), token: await issueToken(env, userId, client) });
+  const user = users[0] as unknown as UserRow;
+  return json(200, { user: publicUser(user), token: await issueToken(env, userId, client, Number(user.session_version), 'otp') });
 }
 
 async function currentUser(request: Request, env: Env, client: string): Promise<UserRow | null> {
   const claims = await bearerClaims(request, env);
   if (!claims || claims.client !== client) return null;
   const { rows } = await query(env, `${USER_SELECT} WHERE u.id = ?`, [claims.sub]);
-  return (rows[0] as unknown as UserRow | undefined) ?? null;
+  const user = rows[0] as unknown as UserRow | undefined;
+  return user && Number(user.session_version) === claims.version ? user : null;
 }
 
 async function session({ request, env, client }: Ctx): Promise<Response> {
   const user = await currentUser(request, env, client);
   if (!user) throw new HttpError(401, 'Unauthorized');
-  return json(200, { user: publicUser(user) });
+  const profile = publicUser(user);
+  if ((profile.is_admin || profile.editor_for.length > 0) && (await bearerClaims(request, env))?.authentication !== 'otp') {
+    throw new HttpError(401, 'Sign in with email to use privileged access');
+  }
+  return json(200, { user: profile });
 }
 
-type Auth = 'client' | 'admin';
+type Auth = 'client' | 'admin' | 'user-management';
 interface Route { method: string; pattern: RegExp; auth: Auth; handler: (ctx: Ctx) => Promise<Response> }
 const ROUTES: Route[] = [
   { method: 'POST', pattern: /^\/v1\/register$/, auth: 'client', handler: register },
@@ -200,10 +212,10 @@ const ROUTES: Route[] = [
   { method: 'POST', pattern: /^\/v1\/centers$/, auth: 'admin', handler: createCenter },
   { method: 'PUT', pattern: /^\/v1\/centers\/([^/]+)$/, auth: 'admin', handler: updateCenter },
   { method: 'DELETE', pattern: /^\/v1\/centers\/([^/]+)$/, auth: 'admin', handler: deleteCenter },
-  { method: 'GET', pattern: /^\/v1\/admin\/users$/, auth: 'admin', handler: adminList },
-  { method: 'POST', pattern: /^\/v1\/admin\/users$/, auth: 'admin', handler: adminCreate },
-  { method: 'PUT', pattern: /^\/v1\/admin\/users\/([^/]+)$/, auth: 'admin', handler: adminUpdate },
-  { method: 'DELETE', pattern: /^\/v1\/admin\/users\/([^/]+)$/, auth: 'admin', handler: adminDeleteById },
+  { method: 'GET', pattern: /^\/v1\/admin\/users$/, auth: 'user-management', handler: adminList },
+  { method: 'POST', pattern: /^\/v1\/admin\/users$/, auth: 'user-management', handler: adminCreate },
+  { method: 'PUT', pattern: /^\/v1\/admin\/users\/([^/]+)$/, auth: 'user-management', handler: adminUpdate },
+  { method: 'DELETE', pattern: /^\/v1\/admin\/users\/([^/]+)$/, auth: 'user-management', handler: adminDeleteById },
   { method: 'POST', pattern: /^\/v1\/admin\/users\/import$/, auth: 'admin', handler: adminImport },
   { method: 'POST', pattern: /^\/v1\/admin\/users\/delete$/, auth: 'admin', handler: adminDelete },
 ];
@@ -212,14 +224,20 @@ const ROUTES: Route[] = [
  * Admin calls use either the server-to-server X-Admin-Key, or a client key plus the bearer token of an admin user.
  * Returns the acting identity (used for created_by/updated_by), or null.
  */
-async function authenticateAdmin(request: Request, env: Env): Promise<string | null> {
+async function authenticateManager(request: Request, env: Env, allowEditor: boolean): Promise<{ actor: string; principal: Ctx['principal'] } | null> {
   const adminKey = request.headers.get('x-admin-key');
   if (adminKey !== null) {
-    return env.ADMIN_API_KEY && equalHex(await sha256(adminKey), await sha256(env.ADMIN_API_KEY)) ? 'admin-key' : null;
+    return env.ADMIN_API_KEY && equalHex(await sha256(adminKey), await sha256(env.ADMIN_API_KEY))
+      ? { actor: 'admin-key', principal: null } : null;
   }
   const client = await identifyClient(request, env);
-  const user = client && await currentUser(request, env, client);
-  return user && Number(user.is_admin) === 1 ? user.email : null;
+  const claims = client ? await bearerClaims(request, env) : null;
+  if (claims?.authentication !== 'otp') return null;
+  const user = client ? await currentUser(request, env, client) : null;
+  if (!user?.email) return null;
+  const profile = publicUser(user);
+  if (!profile.is_admin && (!allowEditor || profile.editor_for.length === 0)) return null;
+  return { actor: user.email, principal: { id: user.id, isAdmin: profile.is_admin, editorFor: profile.editor_for, sessionVersion: Number(user.session_version) } };
 }
 
 async function handle(request: Request, env: Env, cors: Record<string, string>): Promise<Response> {
@@ -233,21 +251,25 @@ async function handle(request: Request, env: Env, cors: Record<string, string>):
   try {
     let client = 'admin';
     let actor = 'admin-key';
-    if (route.auth === 'admin') {
-      const admin = await authenticateAdmin(request, env);
-      if (!admin) return json(401, { error: 'Admin authorization required' }, cors);
-      actor = admin;
+    let principal: Ctx['principal'] = null;
+    if (route.auth === 'admin' || route.auth === 'user-management') {
+      const manager = await authenticateManager(request, env, route.auth === 'user-management');
+      if (!manager) return json(401, { error: 'Management authorization required' }, cors);
+      actor = manager.actor;
+      principal = manager.principal;
       client = (await identifyClient(request, env)) ?? 'admin';
     } else {
       const identified = await identifyClient(request, env);
       if (!identified) return json(401, { error: 'Invalid or missing API key' }, cors);
       client = identified;
     }
-    const response = await route.handler({ request, env, client, params: match!.slice(1), actor });
+    const response = await route.handler({ request, env, client, params: match!.slice(1), actor, principal });
     for (const [name, value] of Object.entries(cors)) response.headers.set(name, value);
     return response;
   } catch (error) {
     if (error instanceof HttpError) return json(error.status, { error: error.message }, { ...cors, ...error.headers });
+    if (error instanceof IntegrityConflict) return json(409, { error: error.message }, cors);
+    if (error instanceof ManagementAuthorizationLost) return json(403, { error: error.message }, cors);
     console.error('Unhandled error', error instanceof Error ? error.message : 'unknown');
     return json(500, { error: 'Internal error' }, cors);
   }

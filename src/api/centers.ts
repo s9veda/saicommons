@@ -1,5 +1,6 @@
-import { query, transaction } from './turso';
+import { query } from './turso';
 import { HttpError, json, readJson, type Ctx } from './common';
+import { managerTransaction } from './manager-transaction';
 
 const COLOR = /^#[0-9A-Fa-f]{6}$/;
 
@@ -40,8 +41,11 @@ async function parseCenter(payload: Record<string, unknown>, ctx: Ctx): Promise<
     }
     editorIds = [...new Set(list as string[])];
     if (editorIds.length > 0) {
-      const { rows } = await query(ctx.env, `SELECT id FROM users WHERE id IN (${editorIds.map(() => '?').join(',')})`, editorIds);
+      const { rows } = await query(ctx.env, `SELECT id, email, name FROM users WHERE id IN (${editorIds.map(() => '?').join(',')})`, editorIds);
       if (rows.length !== editorIds.length) throw new HttpError(400, 'editor_ids contains an unknown user');
+      if (rows.some((row) => !row.email || String(row.name).includes('&'))) {
+        throw new HttpError(400, 'Editors must have an email and cannot be pairs');
+      }
     }
   }
   return { name, color, editorIds };
@@ -67,7 +71,7 @@ export async function createCenter(ctx: Ctx): Promise<Response> {
   const input = await parseCenter(await readJson(ctx.request), ctx);
   if (await nameTaken(ctx, input.name)) throw new HttpError(409, 'A center with this name already exists');
   const now = new Date().toISOString();
-  await transaction(ctx.env, [
+  await managerTransaction(ctx, [
     {
       sql: `INSERT INTO centers (id, name, badge_text_color, created_by, updated_by, created_at, updated_at)
         SELECT CAST(COALESCE(MAX(CAST(id AS INTEGER)), 0) + 1 AS TEXT), ?, ?, ?, ?, ?, ? FROM centers`,
@@ -112,7 +116,7 @@ export async function updateCenter(ctx: Ctx): Promise<Response> {
       });
     }
   }
-  await transaction(ctx.env, statements);
+  await managerTransaction(ctx, statements);
   const { rows } = await query(ctx.env, `${CENTER_SELECT} WHERE CAST(c.id AS INTEGER) = ?`, [id]);
   return json(200, { center: publicCenter(rows[0]) });
 }
@@ -131,6 +135,10 @@ export async function deleteCenter(ctx: Ctx): Promise<Response> {
       dependencies: { type: 'users', items: rows.map((row) => `${row.name}${Number(row.can_edit) ? ' (editor)' : ''}`) },
     });
   }
-  await query(ctx.env, 'DELETE FROM centers WHERE CAST(id AS INTEGER) = ?', [id]);
+  const principal = ctx.principal;
+  const deleted = await query(ctx.env, `DELETE FROM centers WHERE CAST(id AS INTEGER) = ? ${principal
+    ? 'AND EXISTS (SELECT 1 FROM users WHERE id = ? AND session_version = ? AND is_admin = 1 AND email IS NOT NULL)' : ''}`,
+  principal ? [id, principal.id, principal.sessionVersion] : [id]);
+  if (!deleted.changes) throw new HttpError(403, 'Management authorization changed');
   return json(200, { ok: true });
 }

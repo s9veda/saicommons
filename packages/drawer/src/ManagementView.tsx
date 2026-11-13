@@ -7,6 +7,10 @@ import { CentersScreen } from './CentersScreen';
 import { UsersScreen } from './UsersScreen';
 import { useDrawerTheme } from './Context';
 
+export function canManageManagementSection(section: 'centers' | 'users', user: User): boolean {
+  return section === 'centers' ? user.is_admin : user.is_admin || user.editor_for.length > 0;
+}
+
 export function ManagementView({ section, user, onBack, onChanged }: {
   section: 'centers' | 'users';
   user: User;
@@ -18,6 +22,7 @@ export function ManagementView({ section, user, onBack, onChanged }: {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const canManageSection = canManageManagementSection(section, user);
 
   const reload = useCallback(async () => {
     try {
@@ -32,14 +37,15 @@ export function ManagementView({ section, user, onBack, onChanged }: {
   }, []);
 
   useEffect(() => {
+    if (!canManageSection) return;
     let active = true;
     void reload().catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [reload]);
+  }, [reload, canManageSection]);
 
   const reloadAfterChange = useCallback(async () => {
-    await reload();
     await onChanged?.();
+    await reload();
   }, [reload, onChanged]);
 
   return (
@@ -52,8 +58,10 @@ export function ManagementView({ section, user, onBack, onChanged }: {
           {section === 'centers' ? 'Manage centers' : 'Manage users'}
         </Text>
       </View>
-      {error ? <Text accessibilityRole="alert" style={{ color: theme.danger, padding: 16 }}>{error}</Text> : null}
-      {loading ? <ActivityIndicator style={{ marginTop: 32 }} /> : error && centers.length === 0 && users.length === 0 ? (
+      {!canManageSection ? (
+        <Text accessibilityRole="alert" style={{ color: theme.danger, padding: 16 }}>You do not have permission to manage this section.</Text>
+      ) : error ? <Text accessibilityRole="alert" style={{ color: theme.danger, padding: 16 }}>{error}</Text> : null}
+      {canManageSection && (loading ? <ActivityIndicator style={{ marginTop: 32 }} /> : error && centers.length === 0 && users.length === 0 ? (
         <Pressable accessibilityRole="button" onPress={() => { setLoading(true); void reload().catch(() => {}).finally(() => setLoading(false)); }} style={{ padding: 16 }}>
           <Text style={{ color: theme.primary }}>Retry</Text>
         </Pressable>
@@ -61,7 +69,7 @@ export function ManagementView({ section, user, onBack, onChanged }: {
         <CentersScreen centers={centers} users={users} reload={reloadAfterChange} />
       ) : (
         <UsersScreen users={users} centers={centers} me={user} reload={reloadAfterChange} />
-      )}
+      ))}
     </View>
   );
 }

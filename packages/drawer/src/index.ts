@@ -27,6 +27,7 @@ export {
   type Center,
   type UserInput,
   type LoginResult,
+  type LoginRequestResult,
   type RequestConfig
 } from './api';
 

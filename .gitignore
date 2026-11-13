@@ -1,8 +1,12 @@
 node_modules/
 .wrangler/
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
 .env
+.env.*
 .env*.local
+!.env.example
 .expo/
 dist/
 expo-env.d.ts
