@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "node tests/smoke.mjs",
     "start": "npm --prefix src run start",
     "ios": "npm --prefix src run ios",
     "android": "npm --prefix src run android",

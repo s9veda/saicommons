@@ -1,4 +1,4 @@
--- Apply with: turso db shell <db-name> < migrations/0001_init.sql
+-- Apply with: turso db shell <db-name> < database/0001_init.sql
 -- Center memberships and editor permissions are stored as JSON arrays on users.
 
 CREATE TABLE IF NOT EXISTS centers (

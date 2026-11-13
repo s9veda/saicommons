@@ -7,12 +7,12 @@ import assert from 'node:assert/strict';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outdir = path.join(root, '.wrangler', 'smoke-build');
-execFileSync('npx', ['wrangler', 'deploy', '--dry-run', '--outdir', outdir], { cwd: root, stdio: 'pipe' });
+execFileSync('npx', ['wrangler', 'deploy', '--config', 'src/api/wrangler.jsonc', '--dry-run', '--outdir', outdir], { cwd: root, stdio: 'pipe' });
 const worker = (await import(`${pathToFileURL(path.join(outdir, 'index.js')).href}?t=${Date.now()}`)).default;
 
-// In-memory SQLite standing in for Turso's HTTP pipeline endpoint (execute and conditional batch requests).
+// In-memory SQLite stands in for Turso's HTTP pipeline endpoint.
 const db = new DatabaseSync(':memory:');
-db.exec(readFileSync(path.join(root, 'migrations', '0001_init.sql'), 'utf8'));
+db.exec(readFileSync(path.join(root, 'database', '0001_init.sql'), 'utf8'));
 const wire = (v) => (v === null ? { type: 'null' } : typeof v === 'number' || typeof v === 'bigint' ? { type: 'integer', value: String(v) } : { type: 'text', value: v });
 function run(stmt) {
   const args = (stmt.args ?? []).map((a) => (a.type === 'null' ? null : a.type === 'integer' ? Number(a.value) : a.value));
